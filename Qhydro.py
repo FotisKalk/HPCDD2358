@@ -1,101 +1,124 @@
-#!/usr/bin/python
-
+#!/usr/bin/env python3
 import sys
 import matplotlib.pyplot as plt
 import numpy as np
+import time
 
+def main(n_particles=100, benchmark_mode=False):
+    # Parameters (use n_particles instead of hardcoded n)
+    n = n_particles
+    dt = 0.02
+    nt = 100
+    nt_setup = 400
+    n_out = 25
+    b = 4
+    m = 1/n
+    h = 40/n
+    t = 0.
 
-"""
-Solve a simple SE problem.
-Philip Mocz (2017)
-Harvard University
+    # Initialize plot only if not in benchmark mode
+    if not benchmark_mode:
+        plt.figure()
+        xx_plot = np.linspace(-4.0, 4.0, 400).reshape(-1,1)
+        plt.plot(xx_plot, 0.5*xx_plot**2, linewidth=5, color=[0.7, 0.7, 0.9])
 
-i d_t psi + nabla^2/2 psi -x^2 psi/2 = 0
-Domain: [-inf,inf]
-Potential: 1/2 x^2
-Initial condition: particle in SHO
-(hbar = 1, M = 1)
-
-usage: python quantumsph.py
-"""
-
-def main():
-  """ Main Loop.
-  Evolve the time-dependent SE and plot solutions (as *.pdf file)
-  """
-  
-  # Particle in SHO - c.f. Mocz & Succi (2015) Fig. 2
-  # parameters
-  n = 100               # number of particles
-  dt = 0.02             # timestep
-  nt = 100              # number of timesteps
-  nt_setup = 400        # number of timesteps to set up simulation
-  n_out = 25            # plot solution every nout steps
-  b = 4                 # velocity damping for acquiring initial condition
-  m = 1/n               # mass of SPH particle ( m * n = 1 normalizes |wavefunction|^2 to 1)
-  h = 40/n              # smoothing length
-  t = 0.                # time
-
-  # plot potential
-  xx = np.linspace(-4.0, 4.0, num=400)
-  xx = np.reshape(xx,(xx.size,1))
-  fig = plt.plot(xx, 0.5*xx**2, linewidth=5, color=[0.7, 0.7, 0.9])
-  
-  # initialize
-  x = np.linspace(-3.0, 3.0, num=n)
-  x = np.reshape(x,(n,1))
-  u = np.zeros((n,1))
-  
-  rho = density( x, m, h )
-  P = pressure( x, rho, m, h )
-  a = acceleration( x, u, m, rho, P, b, h )
-
-  # get v at t=-0.5*dt for the leap frog integrator using Euler's method
-  u_mhalf = u - 0.5 * dt * a
-
-  # main loop (time evolution)
-  for i in np.arange(-nt_setup, nt):   # negative time (t<0, i<0) is used to set up initial conditions
-
-    # leap frog
-    u_phalf = u_mhalf + a*dt
-    x = x + u_phalf*dt
-    u = 0.5*(u_mhalf+u_phalf)
-    u_mhalf = u_phalf
-    if (i >= 0):
-      t = t + dt
-    print("%.2f" % t)
+    # Initialize
+    x = np.linspace(-3.0, 3.0, num=n).reshape(-1,1)
+    u = np.zeros((n,1))
     
-    if (i == -1 ):  # switch off damping before t=0
-      u = np.zeros((n,1)) + 1.0
-      u_mhalf = u
-      b = 0  # switch off damping at time t=0
+    start_time = time.time()
     
-    # update densities, pressures, accelerations
-    rho = density( x, m, h )
-    P = pressure( x, rho, m, h )
-    a = acceleration( x, u, m, rho, P, b, h)
- 
-    # plot solution every n_out steps
-    if( (i >= 0) and (i % n_out) == 0 ):
-      xx = np.linspace(-4.0, 4.0, num=400)
-      xx = np.reshape(xx,(xx.size,1))
-      rr = probeDensity(x, m, h, xx)
-      rr_exact = 1./np.sqrt(np.pi) * np.exp(-(xx-np.sin(t))**2/2.)**2
-      fig = plt.plot(xx, rr_exact, linewidth=2, color=[.6, .6, .6])
-      fig = plt.plot(xx, rr, linewidth=2, color=[1.*i/nt, 0, 1.-1.*i/nt], label='$t='+"%.2f" % t +'$')
-    # plot the t<0 damping process for fun
-    # if( i==-nt_setup or i==-nt_setup*3/4 or i==-nt_setup/2 ):
-    #   xx = np.linspace(-4.0, 4.0, num=400)
-    #   xx = np.reshape(xx,(xx.size,1))
-    #   rr = probeDensity(x, m, h, xx)
-    #   fig = plt.plot(xx, rr, linewidth=1, color=[0.9, 0.9, 0.9])
-  
-  plt.legend()
-  plt.xlabel('$x$')
-  plt.ylabel('$|\psi|^2$')
-  plt.axis([-2, 4, 0, 0.8])
-  plt.savefig('solution.pdf', bbox_inches='tight', pad_inches = 0)
-  plt.close()
+    # Simulation loop
+    rho = density(x, m, h)
+    P = pressure(x, rho, m, h)
+    a = acceleration(x, u, m, rho, P, b, h)
+    u_mhalf = u - 0.5 * dt * a
+
+    for i in range(-nt_setup, nt):
+        u_phalf = u_mhalf + a*dt
+        x = x + u_phalf*dt
+        u = 0.5*(u_mhalf+u_phalf)
+        u_mhalf = u_phalf
+        
+        if i >= 0:
+            t += dt
+            
+        if i == -1:
+            u = np.zeros((n,1)) + 1.0
+            u_mhalf = u
+            b = 0
+
+        rho = density(x, m, h)
+        P = pressure(x, rho, m, h)
+        a = acceleration(x, u, m, rho, P, b, h)
+
+        # Plotting inside the loop but only when not in benchmark mode
+        if not benchmark_mode and (i >= 0) and (i % n_out == 0):
+            xx = np.linspace(-4.0, 4.0, 400).reshape(-1,1)
+            rr = probeDensity(x, m, h, xx)
+            rr_exact = 1./np.sqrt(np.pi) * np.exp(-(xx-np.sin(t))**2/2.)**2
+            plt.plot(xx, rr_exact, linewidth=2, color=[.6, .6, .6])
+            plt.plot(xx, rr, linewidth=2, color=[1.*i/nt, 0, 1.-1.*i/nt], 
+                    label=f'$t={t:.2f}$')
+
+    exec_time = time.time() - start_time
+    
+    if benchmark_mode:
+        return exec_time
+    else:
+        # Finalize plot
+        plt.legend()
+        plt.xlabel('$x$')
+        plt.ylabel('$|\psi|^2$')
+        plt.axis([-2, 4, 0, 0.8])
+        plt.savefig(f'solution_{n:.0f}.pdf', bbox_inches='tight', pad_inches=0)
+        plt.close()
+        
+def benchmark():
+    # Benchmark parameters
+    particle_numbers = [10, 20, 40, 80, 160, 320, 640, 1280] 
+    runs = 5  # Number of runs per particle count
+    
+    # Storage for results
+    avg_times = []
+    std_devs = []
+    
+    print("Starting benchmark...")
+    
+    for n in particle_numbers:
+        print(f"\nRunning benchmark for n = {n} particles")
+        run_times = []
+        
+        for run in range(runs):
+            print(f"  Run {run+1}/{runs}...", end=" ", flush=True)
+            # Run simulation with current particle count
+            run_time = main(n_particles=n, benchmark_mode=True)
+            run_times.append(run_time)
+            print(f"{run_time:.2f}s")
+        
+        # Calculate statistics for this particle count
+        avg_time = np.mean(run_times)
+        std_dev = np.std(run_times)
+        
+        avg_times.append(avg_time)
+        std_devs.append(std_dev)
+        
+        print(f"  n = {n}: Avg = {avg_time:.2f}s, Std Dev = {std_dev:.2f}s")
+    
+    # Plot results
+    plt.figure(figsize=(10, 6))
+    plt.errorbar(particle_numbers, avg_times, yerr=std_devs, 
+                 fmt='-o', capsize=5, capthick=2, elinewidth=2)
+    plt.xlabel('Number of particles')
+    plt.ylabel('Average execution time (s)')
+    plt.title('Initial performance benchmark')
+    plt.grid(True)
+    
+    # Save and show plot
+    plt.savefig('benchmark_results_original.pdf', dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    print("\nBenchmark complete! Results saved to benchmark_results.png")
    
    
    
@@ -227,4 +250,7 @@ def probeDensity(x, m, h, xx):
 
 
 if __name__ == "__main__":
-  main()
+    if '--benchmark' in sys.argv:
+        benchmark()
+    else:
+        main()
